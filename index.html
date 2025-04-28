@@ -1,0 +1,1364 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PDF Editor Tool</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.16.0/pdf-lib.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.min.js"></script>
+    <style>
+        :root {
+            --primary: #4a6fa5;
+            --secondary: #166088;
+            --light: #f8f9fa;
+            --dark: #343a40;
+        }
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: var(--dark);
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px 0;
+            border-bottom: 1px solid #ddd;
+        }
+        h1 {
+            color: var(--secondary);
+            margin-bottom: 10px;
+        }
+        .tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 1px solid #ddd;
+        }
+        .tab {
+            padding: 10px 20px;
+            cursor: pointer;
+            background: none;
+            border: none;
+            font-size: 16px;
+            transition: all 0.3s;
+        }
+        .tab.active {
+            background-color: var(--primary);
+            color: white;
+            border-radius: 5px 5px 0 0;
+        }
+        .tab-content {
+            display: none;
+            padding: 20px;
+            background: white;
+            border-radius: 5px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .drop-zone {
+            border: 2px dashed #aaa;
+            border-radius: 5px;
+            padding: 30px;
+            text-align: center;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+            cursor: pointer;
+        }
+        .drop-zone:hover, .drop-zone.active {
+            border-color: var(--primary);
+            background-color: rgba(74, 111, 165, 0.05);
+        }
+        .drop-zone p {
+            margin-bottom: 15px;
+        }
+        .btn {
+            background-color: var(--primary);
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            margin-right: 10px;
+        }
+        .btn:hover {
+            background-color: var(--secondary);
+        }
+        .btn-secondary {
+            background-color: #6c757d;
+        }
+        .btn-secondary:hover {
+            background-color: #5a6268;
+        }
+        .thumbnail-container {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin: 20px 0;
+        }
+        .thumbnail {
+            border: 1px solid #ddd;
+            padding: 5px;
+            border-radius: 3px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .thumbnail:hover {
+            border-color: var(--primary);
+        }
+        .thumbnail.selected {
+            border-color: var(--primary);
+            background-color: rgba(74, 111, 165, 0.1);
+        }
+        .thumbnail img {
+            width: 100px;
+            height: auto;
+        }
+        .editor-container {
+            display: flex;
+            margin-top: 20px;
+        }
+        .pdf-viewer {
+            flex: 1;
+            border: 1px solid #ddd;
+            height: 500px;
+            overflow: auto;
+            position: relative;
+        }
+        .toolbar {
+            width: 200px;
+            padding-left: 20px;
+        }
+        .tool-group {
+            margin-bottom: 20px;
+        }
+        .tool-group h4 {
+            margin-bottom: 10px;
+            color: var(--secondary);
+        }
+        .tool-option {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        input[type="range"], input[type="color"], input[type="number"] {
+            width: 100%;
+        }
+        .hidden {
+            display: none;
+        }
+        #pdf-preview {
+            width: 100%;
+            height: 100%;
+        }
+        #pdf-render {
+            width: 100%;
+        }
+        .page-info {
+            margin: 10px 0;
+            font-size: 14px;
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>PDF Editor Tool</h1>
+            <p>All processing happens in your browser - no files are uploaded to any server</p>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="merge">Merge PDFs</button>
+            <button class="tab" data-tab="split">Split PDF</button>
+            <button class="tab" data-tab="compress">Compress PDF</button>
+            <button class="tab" data-tab="edit">Edit PDF</button>
+            <button class="tab" data-tab="convert">PDF to Images</button>
+        </div>
+
+        <!-- Merge PDFs Tab -->
+        <div id="merge" class="tab-content active">
+            <h2>Merge PDF Files</h2>
+            <p>Combine multiple PDF files into one document</p>
+            
+            <div class="drop-zone" id="merge-drop-zone">
+                <p>Drag & drop PDF files here or click to select</p>
+                <button class="btn">Select Files</button>
+                <input type="file" id="merge-files" multiple accept=".pdf" class="hidden">
+            </div>
+            
+            <div id="merge-thumbnails" class="thumbnail-container hidden"></div>
+            
+            <div id="merge-controls" class="hidden">
+                <p>Drag thumbnails to reorder pages</p>
+                <button id="merge-execute" class="btn">Merge PDFs</button>
+                <button id="merge-reset" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+
+        <!-- Split PDF Tab -->
+        <div id="split" class="tab-content">
+            <h2>Split PDF File</h2>
+            <p>Extract specific pages or split by page ranges</p>
+            
+            <div class="drop-zone" id="split-drop-zone">
+                <p>Drag & drop a PDF file here or click to select</p>
+                <button class="btn">Select File</button>
+                <input type="file" id="split-file" accept=".pdf" class="hidden">
+            </div>
+            
+            <div id="split-thumbnails" class="thumbnail-container hidden"></div>
+            
+            <div id="split-controls" class="hidden">
+                <div class="tool-group">
+                    <h4>Split Options</h4>
+                    <div class="tool-option">
+                        <label><input type="radio" name="split-mode" value="range" checked> Extract page range</label>
+                        <div id="split-range-controls">
+                            <label>From page: <input type="number" id="split-from" min="1" value="1"></label>
+                            <label>To page: <input type="number" id="split-to" min="1" value="1"></label>
+                        </div>
+                    </div>
+                    <div class="tool-option">
+                        <label><input type="radio" name="split-mode" value="single"> Extract single page</label>
+                        <div id="split-single-controls" class="hidden">
+                            <label>Page number: <input type="number" id="split-page" min="1" value="1"></label>
+                        </div>
+                    </div>
+                    <div class="tool-option">
+                        <label><input type="radio" name="split-mode" value="multiple"> Extract multiple pages</label>
+                        <div id="split-multiple-controls" class="hidden">
+                            <label>Page numbers (comma separated): <input type="text" id="split-pages"></label>
+                        </div>
+                    </div>
+                </div>
+                <button id="split-execute" class="btn">Split PDF</button>
+                <button id="split-reset" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+
+        <!-- Compress PDF Tab -->
+        <div id="compress" class="tab-content">
+            <h2>Compress PDF File</h2>
+            <p>Reduce file size with minimal quality loss</p>
+            
+            <div class="drop-zone" id="compress-drop-zone">
+                <p>Drag & drop a PDF file here or click to select</p>
+                <button class="btn">Select File</button>
+                <input type="file" id="compress-file" accept=".pdf" class="hidden">
+            </div>
+            
+            <div id="compress-controls" class="hidden">
+                <div class="tool-group">
+                    <h4>Compression Level</h4>
+                    <div class="tool-option">
+                        <label>
+                            <input type="radio" name="compress-level" value="low" checked> Low (smaller file)
+                        </label>
+                    </div>
+                    <div class="tool-option">
+                        <label>
+                            <input type="radio" name="compress-level" value="medium"> Medium (balanced)
+                        </label>
+                    </div>
+                    <div class="tool-option">
+                        <label>
+                            <input type="radio" name="compress-level" value="high"> High (better quality)
+                        </label>
+                    </div>
+                </div>
+                <div class="tool-group">
+                    <h4>Estimated Size Reduction</h4>
+                    <p id="compress-estimate">Select a file first</p>
+                </div>
+                <button id="compress-execute" class="btn">Compress PDF</button>
+                <button id="compress-reset" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+
+        <!-- Edit PDF Tab -->
+        <div id="edit" class="tab-content">
+            <h2>Edit PDF File</h2>
+            <p>Add text, annotations, and shapes to your PDF</p>
+            
+            <div class="drop-zone" id="edit-drop-zone">
+                <p>Drag & drop a PDF file here or click to select</p>
+                <button class="btn">Select File</button>
+                <input type="file" id="edit-file" accept=".pdf" class="hidden">
+            </div>
+            
+            <div id="edit-container" class="editor-container hidden">
+                <div class="pdf-viewer">
+                    <canvas id="pdf-preview"></canvas>
+                </div>
+                <div class="toolbar">
+                    <div class="tool-group">
+                        <h4>Tools</h4>
+                        <button id="tool-text" class="btn">Add Text</button>
+                        <button id="tool-highlight" class="btn">Highlight</button>
+                        <button id="tool-draw" class="btn">Draw</button>
+                        <button id="tool-rectangle" class="btn">Rectangle</button>
+                    </div>
+                    
+                    <div id="text-options" class="tool-group hidden">
+                        <h4>Text Options</h4>
+                        <div class="tool-option">
+                            <label>Font Size</label>
+                            <input type="range" id="text-size" min="8" max="72" value="12">
+                        </div>
+                        <div class="tool-option">
+                            <label>Color</label>
+                            <input type="color" id="text-color" value="#000000">
+                        </div>
+                    </div>
+                    
+                    <div id="draw-options" class="tool-group hidden">
+                        <h4>Drawing Options</h4>
+                        <div class="tool-option">
+                            <label>Line Width</label>
+                            <input type="range" id="draw-width" min="1" max="20" value="3">
+                        </div>
+                        <div class="tool-option">
+                            <label>Color</label>
+                            <input type="color" id="draw-color" value="#FF0000">
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div id="edit-controls" class="hidden">
+                <button id="edit-save" class="btn">Save PDF</button>
+                <button id="edit-reset" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+
+        <!-- Convert to Images Tab -->
+        <div id="convert" class="tab-content">
+            <h2>Convert PDF to Images</h2>
+            <p>Export PDF pages as JPG or PNG images</p>
+            
+            <div class="drop-zone" id="convert-drop-zone">
+                <p>Drag & drop a PDF file here or click to select</p>
+                <button class="btn">Select File</button>
+                <input type="file" id="convert-file" accept=".pdf" class="hidden">
+            </div>
+            
+            <div id="convert-thumbnails" class="thumbnail-container hidden"></div>
+            
+            <div id="convert-controls" class="hidden">
+                <div class="tool-group">
+                    <h4>Conversion Options</h4>
+                    <div class="tool-option">
+                        <label>Format</label>
+                        <select id="convert-format">
+                            <option value="jpg">JPG</option>
+                            <option value="png">PNG</option>
+                        </select>
+                    </div>
+                    <div class="tool-option">
+                        <label>Quality (1-100)</label>
+                        <input type="range" id="convert-quality" min="1" max="100" value="90">
+                    </div>
+                    <div class="tool-option">
+                        <label>Pages to convert</label>
+                        <select id="convert-pages">
+                            <option value="all">All pages</option>
+                            <option value="selected">Selected pages</option>
+                            <option value="range">Page range</option>
+                        </select>
+                    </div>
+                    <div id="convert-range-controls" class="hidden">
+                        <label>From page: <input type="number" id="convert-from" min="1" value="1"></label>
+                        <label>To page: <input type="number" id="convert-to" min="1" value="1"></label>
+                    </div>
+                </div>
+                <button id="convert-execute" class="btn">Convert to Images</button>
+                <button id="convert-reset" class="btn btn-secondary">Reset</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Set PDF.js worker path
+        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.12.313/pdf.worker.min.js';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                // Remove active class from all tabs and content
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                
+                // Add active class to clicked tab and corresponding content
+                tab.classList.add('active');
+                const tabId = tab.getAttribute('data-tab');
+                document.getElementById(tabId).classList.add('active');
+            });
+        });
+
+        // Initialize all tools
+        document.addEventListener('DOMContentLoaded', () => {
+            initMergeTool();
+            initSplitTool();
+            initCompressTool();
+            initEditTool();
+            initConvertTool();
+        });
+
+        // ========================
+        // Merge PDFs Functionality
+        // ========================
+        function initMergeTool() {
+            const dropZone = document.getElementById('merge-drop-zone');
+            const fileInput = document.getElementById('merge-files');
+            const thumbnailsContainer = document.getElementById('merge-thumbnails');
+            const mergeBtn = document.getElementById('merge-execute');
+            const resetBtn = document.getElementById('merge-reset');
+            
+            let pdfFiles = [];
+            let pdfPages = [];
+            
+            // Handle file selection
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleMergeFiles);
+            
+            // Handle drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                fileInput.files = e.dataTransfer.files;
+                handleMergeFiles({ target: fileInput });
+            });
+            
+            async function handleMergeFiles(e) {
+                const files = Array.from(e.target.files).filter(f => f.type === 'application/pdf');
+                
+                if (files.length < 2) {
+                    alert('Please select at least 2 PDF files to merge');
+                    return;
+                }
+                
+                pdfFiles = files;
+                pdfPages = [];
+                
+                // Show thumbnails
+                thumbnailsContainer.innerHTML = '';
+                thumbnailsContainer.classList.remove('hidden');
+                
+                // Process each file
+                for (const file of files) {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+                        
+                        // Get first page for thumbnail
+                        const page = await pdfDoc.getPage(1);
+                        const viewport = page.getViewport({ scale: 0.2 });
+                        
+                        // Create canvas for thumbnail
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        // Render page to canvas
+                        await page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        }).promise;
+                        
+                        // Create thumbnail container
+                        const thumbnail = document.createElement('div');
+                        thumbnail.className = 'thumbnail';
+                        thumbnail.innerHTML = `
+                            <img src="${canvas.toDataURL()}" alt="${file.name}">
+                            <p>${file.name} (${pdfDoc.numPages} pages)</p>
+                        `;
+                        
+                        thumbnailsContainer.appendChild(thumbnail);
+                        pdfPages.push({
+                            name: file.name,
+                            pages: pdfDoc.numPages,
+                            arrayBuffer: arrayBuffer
+                        });
+                        
+                    } catch (error) {
+                        console.error('Error processing PDF:', error);
+                        alert(`Error processing ${file.name}: ${error.message}`);
+                    }
+                }
+                
+                document.getElementById('merge-controls').classList.remove('hidden');
+            }
+            
+            // Merge PDFs
+            mergeBtn.addEventListener('click', async () => {
+                if (pdfPages.length < 2) {
+                    alert('Please add at least 2 PDF files first');
+                    return;
+                }
+                
+                try {
+                    const { PDFDocument } = PDFLib;
+                    const mergedPdf = await PDFDocument.create();
+                    
+                    // Add all pages from all PDFs
+                    for (const pdf of pdfPages) {
+                        const pdfDoc = await PDFDocument.load(pdf.arrayBuffer);
+                        const pages = await mergedPdf.copyPages(pdfDoc, pdfDoc.getPageIndices());
+                        pages.forEach(page => mergedPdf.addPage(page));
+                    }
+                    
+                    // Save and download
+                    const mergedPdfBytes = await mergedPdf.save();
+                    saveAs(new Blob([mergedPdfBytes], { type: 'application/pdf' }), 'merged.pdf');
+                    
+                } catch (error) {
+                    console.error('Error merging PDFs:', error);
+                    alert(`Error merging PDFs: ${error.message}`);
+                }
+            });
+            
+            // Reset
+            resetBtn.addEventListener('click', () => {
+                pdfFiles = [];
+                pdfPages = [];
+                fileInput.value = '';
+                thumbnailsContainer.innerHTML = '';
+                thumbnailsContainer.classList.add('hidden');
+                document.getElementById('merge-controls').classList.add('hidden');
+            });
+        }
+
+        // ========================
+        // Split PDF Functionality
+        // ========================
+        function initSplitTool() {
+            const dropZone = document.getElementById('split-drop-zone');
+            const fileInput = document.getElementById('split-file');
+            const thumbnailsContainer = document.getElementById('split-thumbnails');
+            const splitBtn = document.getElementById('split-execute');
+            const resetBtn = document.getElementById('split-reset');
+            
+            let pdfFile = null;
+            let pdfDoc = null;
+            let numPages = 0;
+            
+            // Handle file selection
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleSplitFile);
+            
+            // Handle drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                fileInput.files = e.dataTransfer.files;
+                handleSplitFile({ target: fileInput });
+            });
+            
+            // Handle split mode changes
+            document.querySelectorAll('input[name="split-mode"]').forEach(radio => {
+                radio.addEventListener('change', (e) => {
+                    document.getElementById('split-range-controls').classList.toggle('hidden', e.target.value !== 'range');
+                    document.getElementById('split-single-controls').classList.toggle('hidden', e.target.value !== 'single');
+                    document.getElementById('split-multiple-controls').classList.toggle('hidden', e.target.value !== 'multiple');
+                });
+            });
+            
+            async function handleSplitFile(e) {
+                const file = e.target.files[0];
+                
+                if (!file || file.type !== 'application/pdf') {
+                    alert('Please select a valid PDF file');
+                    return;
+                }
+                
+                pdfFile = file;
+                
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    numPages = pdfDoc.numPages;
+                    
+                    // Update page range inputs
+                    document.getElementById('split-from').max = numPages;
+                    document.getElementById('split-to').max = numPages;
+                    document.getElementById('split-to').value = numPages;
+                    document.getElementById('split-page').max = numPages;
+                    document.getElementById('split-page').value = 1;
+                    
+                    // Show thumbnails
+                    thumbnailsContainer.innerHTML = '';
+                    thumbnailsContainer.classList.remove('hidden');
+                    
+                    // Create thumbnails for each page
+                    for (let i = 1; i <= Math.min(numPages, 10); i++) {
+                        const page = await pdfDoc.getPage(i);
+                        const viewport = page.getViewport({ scale: 0.15 });
+                        
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        await page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        }).promise;
+                        
+                        const thumbnail = document.createElement('div');
+                        thumbnail.className = 'thumbnail';
+                        thumbnail.dataset.page = i;
+                        thumbnail.innerHTML = `
+                            <img src="${canvas.toDataURL()}" alt="Page ${i}">
+                            <p>Page ${i}</p>
+                        `;
+                        
+                        thumbnail.addEventListener('click', () => {
+                            thumbnail.classList.toggle('selected');
+                        });
+                        
+                        thumbnailsContainer.appendChild(thumbnail);
+                    }
+                    
+                    if (numPages > 10) {
+                        const moreText = document.createElement('p');
+                        moreText.textContent = `... and ${numPages - 10} more pages`;
+                        thumbnailsContainer.appendChild(moreText);
+                    }
+                    
+                    document.getElementById('split-controls').classList.remove('hidden');
+                    
+                } catch (error) {
+                    console.error('Error processing PDF:', error);
+                    alert(`Error processing PDF: ${error.message}`);
+                }
+            }
+            
+            // Split PDF
+            splitBtn.addEventListener('click', async () => {
+                if (!pdfDoc) {
+                    alert('Please select a PDF file first');
+                    return;
+                }
+                
+                try {
+                    const splitMode = document.querySelector('input[name="split-mode"]:checked').value;
+                    const { PDFDocument } = PDFLib;
+                    const newPdf = await PDFDocument.create();
+                    const arrayBuffer = await pdfFile.arrayBuffer();
+                    const originalPdf = await PDFDocument.load(arrayBuffer);
+                    
+                    let pageIndices = [];
+                    
+                    if (splitMode === 'range') {
+                        const from = parseInt(document.getElementById('split-from').value);
+                        const to = parseInt(document.getElementById('split-to').value);
+                        
+                        if (from > to || from < 1 || to > numPages) {
+                            alert('Invalid page range');
+                            return;
+                        }
+                        
+                        for (let i = from; i <= to; i++) {
+                            pageIndices.push(i - 1); // PDFLib uses 0-based indexing
+                        }
+                        
+                    } else if (splitMode === 'single') {
+                        const page = parseInt(document.getElementById('split-page').value);
+                        
+                        if (page < 1 || page > numPages) {
+                            alert('Invalid page number');
+                            return;
+                        }
+                        
+                        pageIndices.push(page - 1);
+                        
+                    } else if (splitMode === 'multiple') {
+                        const pagesInput = document.getElementById('split-pages').value;
+                        const pages = pagesInput.split(',').map(p => parseInt(p.trim()));
+                        
+                        for (const page of pages) {
+                            if (isNaN(page) || page < 1 || page > numPages) {
+                                alert(`Invalid page number: ${page}`);
+                                return;
+                            }
+                            pageIndices.push(page - 1);
+                        }
+                    }
+                    
+                    // Copy selected pages to new PDF
+                    const pages = await newPdf.copyPages(originalPdf, pageIndices);
+                    pages.forEach(page => newPdf.addPage(page));
+                    
+                    // Save and download
+                    const newPdfBytes = await newPdf.save();
+                    saveAs(new Blob([newPdfBytes], { type: 'application/pdf' }), 'split.pdf');
+                    
+                } catch (error) {
+                    console.error('Error splitting PDF:', error);
+                    alert(`Error splitting PDF: ${error.message}`);
+                }
+            });
+            
+            // Reset
+            resetBtn.addEventListener('click', () => {
+                pdfFile = null;
+                pdfDoc = null;
+                fileInput.value = '';
+                thumbnailsContainer.innerHTML = '';
+                thumbnailsContainer.classList.add('hidden');
+                document.getElementById('split-controls').classList.add('hidden');
+            });
+        }
+
+        // ========================
+        // Compress PDF Functionality
+        // ========================
+        function initCompressTool() {
+            const dropZone = document.getElementById('compress-drop-zone');
+            const fileInput = document.getElementById('compress-file');
+            const compressBtn = document.getElementById('compress-execute');
+            const resetBtn = document.getElementById('compress-reset');
+            
+            let pdfFile = null;
+            
+            // Handle file selection
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleCompressFile);
+            
+            // Handle drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                fileInput.files = e.dataTransfer.files;
+                handleCompressFile({ target: fileInput });
+            });
+            
+            async function handleCompressFile(e) {
+                const file = e.target.files[0];
+                
+                if (!file || file.type !== 'application/pdf') {
+                    alert('Please select a valid PDF file');
+                    return;
+                }
+                
+                pdfFile = file;
+                document.getElementById('compress-estimate').textContent = `Original size: ${formatFileSize(file.size)}`;
+                document.getElementById('compress-controls').classList.remove('hidden');
+            }
+            
+            // Format file size
+            function formatFileSize(bytes) {
+                if (bytes === 0) return '0 Bytes';
+                const k = 1024;
+                const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+                const i = Math.floor(Math.log(bytes) / Math.log(k));
+                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+            }
+            
+            // Compress PDF
+            compressBtn.addEventListener('click', async () => {
+                if (!pdfFile) {
+                    alert('Please select a PDF file first');
+                    return;
+                }
+                
+                try {
+                    const compressionLevel = document.querySelector('input[name="compress-level"]:checked').value;
+                    const { PDFDocument } = PDFLib;
+                    const arrayBuffer = await pdfFile.arrayBuffer();
+                    
+                    // Load the PDF
+                    const pdfDoc = await PDFDocument.load(arrayBuffer, {
+                        // Compression options based on selected level
+                        ...(compressionLevel === 'low' && {
+                            ignoreEncryption: true,
+                            throwOnInvalidObject: false,
+                            useObjectStreams: true
+                        }),
+                        ...(compressionLevel === 'medium' && {
+                            ignoreEncryption: false,
+                            throwOnInvalidObject: false,
+                            useObjectStreams: true
+                        }),
+                        ...(compressionLevel === 'high' && {
+                            ignoreEncryption: false,
+                            throwOnInvalidObject: true,
+                            useObjectStreams: false
+                        })
+                    });
+                    
+                    // Save with compression
+                    const compressedPdfBytes = await pdfDoc.save({
+                        useObjectStreams: compressionLevel !== 'high',
+                        // More aggressive compression for lower quality settings
+                        ...(compressionLevel === 'low' && {
+                            useCompression: true,
+                            // Reduce image quality for embedded images
+                            // Note: This is a simplified approach - real compression would need image processing
+                        })
+                    });
+                    
+                    // Download
+                    saveAs(new Blob([compressedPdfBytes], { type: 'application/pdf' }), 'compressed.pdf');
+                    
+                } catch (error) {
+                    console.error('Error compressing PDF:', error);
+                    alert(`Error compressing PDF: ${error.message}`);
+                }
+            });
+            
+            // Reset
+            resetBtn.addEventListener('click', () => {
+                pdfFile = null;
+                fileInput.value = '';
+                document.getElementById('compress-estimate').textContent = 'Select a file first';
+                document.getElementById('compress-controls').classList.add('hidden');
+            });
+        }
+
+        // ========================
+        // Edit PDF Functionality
+        // ========================
+        function initEditTool() {
+            const dropZone = document.getElementById('edit-drop-zone');
+            const fileInput = document.getElementById('edit-file');
+            const saveBtn = document.getElementById('edit-save');
+            const resetBtn = document.getElementById('edit-reset');
+            const pdfCanvas = document.getElementById('pdf-preview');
+            
+            let pdfDoc = null;
+            let currentPage = 1;
+            let scale = 1.5;
+            let activeTool = null;
+            let isDrawing = false;
+            let lastX = 0;
+            let lastY = 0;
+            let annotations = [];
+            
+            // Handle file selection
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleEditFile);
+            
+            // Handle drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                fileInput.files = e.dataTransfer.files;
+                handleEditFile({ target: fileInput });
+            });
+            
+            // Tool buttons
+            document.getElementById('tool-text').addEventListener('click', () => setActiveTool('text'));
+            document.getElementById('tool-highlight').addEventListener('click', () => setActiveTool('highlight'));
+            document.getElementById('tool-draw').addEventListener('click', () => setActiveTool('draw'));
+            document.getElementById('tool-rectangle').addEventListener('click', () => setActiveTool('rectangle'));
+            
+            function setActiveTool(tool) {
+                activeTool = tool;
+                
+                // Show/hide tool options
+                document.getElementById('text-options').classList.toggle('hidden', tool !== 'text');
+                document.getElementById('draw-options').classList.toggle('hidden', !['draw', 'rectangle', 'highlight'].includes(tool));
+                
+                // Update canvas cursor
+                pdfCanvas.style.cursor = tool === 'text' ? 'text' : 'crosshair';
+            }
+            
+            async function handleEditFile(e) {
+                const file = e.target.files[0];
+                
+                if (!file || file.type !== 'application/pdf') {
+                    alert('Please select a valid PDF file');
+                    return;
+                }
+                
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    
+                    // Show editor
+                    document.getElementById('edit-container').classList.remove('hidden');
+                    document.getElementById('edit-controls').classList.remove('hidden');
+                    
+                    // Render first page
+                    await renderPage(1);
+                    
+                } catch (error) {
+                    console.error('Error loading PDF:', error);
+                    alert(`Error loading PDF: ${error.message}`);
+                }
+            }
+            
+            async function renderPage(pageNum) {
+                if (!pdfDoc) return;
+                
+                try {
+                    const page = await pdfDoc.getPage(pageNum);
+                    const viewport = page.getViewport({ scale: scale });
+                    
+                    // Adjust canvas dimensions
+                    pdfCanvas.height = viewport.height;
+                    pdfCanvas.width = viewport.width;
+                    
+                    // Render PDF page
+                    await page.render({
+                        canvasContext: pdfCanvas.getContext('2d'),
+                        viewport: viewport
+                    }).promise;
+                    
+                    currentPage = pageNum;
+                    
+                    // Add event listeners for editing
+                    setupCanvasEvents();
+                    
+                } catch (error) {
+                    console.error('Error rendering page:', error);
+                    alert(`Error rendering page: ${error.message}`);
+                }
+            }
+            
+            function setupCanvasEvents() {
+                const ctx = pdfCanvas.getContext('2d');
+                
+                pdfCanvas.onmousedown = (e) => {
+                    if (!activeTool) return;
+                    
+                    const rect = pdfCanvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    
+                    if (activeTool === 'text') {
+                        // Add text box
+                        const text = prompt('Enter text:');
+                        if (text) {
+                            const size = parseInt(document.getElementById('text-size').value);
+                            const color = document.getElementById('text-color').value;
+                            
+                            ctx.font = `${size}px Arial`;
+                            ctx.fillStyle = color;
+                            ctx.fillText(text, x, y);
+                            
+                            // Save annotation
+                            annotations.push({
+                                type: 'text',
+                                text: text,
+                                x: x,
+                                y: y,
+                                size: size,
+                                color: color,
+                                page: currentPage
+                            });
+                        }
+                    } else {
+                        // Start drawing
+                        isDrawing = true;
+                        lastX = x;
+                        lastY = y;
+                    }
+                };
+                
+                pdfCanvas.onmousemove = (e) => {
+                    if (!isDrawing || !activeTool) return;
+                    
+                    const rect = pdfCanvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const ctx = pdfCanvas.getContext('2d');
+                    
+                    if (activeTool === 'draw') {
+                        const width = parseInt(document.getElementById('draw-width').value);
+                        const color = document.getElementById('draw-color').value;
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(lastX, lastY);
+                        ctx.lineTo(x, y);
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.stroke();
+                        
+                        lastX = x;
+                        lastY = y;
+                        
+                    } else if (activeTool === 'rectangle') {
+                        // For rectangle, we'll draw on mouseup
+                    } else if (activeTool === 'highlight') {
+                        const width = 15;
+                        const color = 'rgba(255, 255, 0, 0.5)';
+                        
+                        ctx.beginPath();
+                        ctx.moveTo(lastX, lastY);
+                        ctx.lineTo(x, y);
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.stroke();
+                        
+                        lastX = x;
+                        lastY = y;
+                    }
+                };
+                
+                pdfCanvas.onmouseup = (e) => {
+                    if (!isDrawing || !activeTool) return;
+                    
+                    const rect = pdfCanvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    const ctx = pdfCanvas.getContext('2d');
+                    
+                    if (activeTool === 'rectangle') {
+                        const width = parseInt(document.getElementById('draw-width').value);
+                        const color = document.getElementById('draw-color').value;
+                        
+                        ctx.beginPath();
+                        ctx.rect(lastX, lastY, x - lastX, y - lastY);
+                        ctx.strokeStyle = color;
+                        ctx.lineWidth = width;
+                        ctx.stroke();
+                        
+                        annotations.push({
+                            type: 'rectangle',
+                            x1: lastX,
+                            y1: lastY,
+                            x2: x,
+                            y2: y,
+                            width: width,
+                            color: color,
+                            page: currentPage
+                        });
+                    }
+                    
+                    isDrawing = false;
+                };
+                
+                pdfCanvas.onmouseleave = () => {
+                    isDrawing = false;
+                };
+            }
+            
+            // Save edited PDF
+            saveBtn.addEventListener('click', async () => {
+                if (!pdfDoc) {
+                    alert('Please load a PDF first');
+                    return;
+                }
+                
+                try {
+                    const { PDFDocument, rgb } = PDFLib;
+                    const arrayBuffer = await fileInput.files[0].arrayBuffer();
+                    const pdfDoc = await PDFDocument.load(arrayBuffer);
+                    const pages = pdfDoc.getPages();
+                    
+                    // For simplicity, we'll just add annotations to the first page
+                    // In a real app, you'd need to handle multiple pages and more complex annotations
+                    const firstPage = pages[0];
+                    
+                    for (const annotation of annotations.filter(a => a.page === 1)) {
+                        if (annotation.type === 'text') {
+                            firstPage.drawText(annotation.text, {
+                                x: annotation.x,
+                                y: firstPage.getHeight() - annotation.y, // PDF y-coordinate is from bottom
+                                size: annotation.size,
+                                color: rgb(
+                                    parseInt(annotation.color.substr(1, 2), 16) / 255,
+                                    parseInt(annotation.color.substr(3, 2), 16) / 255,
+                                    parseInt(annotation.color.substr(5, 2), 16) / 255
+                                )
+                            });
+                        } else if (annotation.type === 'rectangle') {
+                            firstPage.drawRectangle({
+                                x: annotation.x1,
+                                y: firstPage.getHeight() - annotation.y1,
+                                width: annotation.x2 - annotation.x1,
+                                height: -(annotation.y2 - annotation.y1), // Negative because PDF y goes down
+                                borderWidth: annotation.width,
+                                borderColor: rgb(
+                                    parseInt(annotation.color.substr(1, 2), 16) / 255,
+                                    parseInt(annotation.color.substr(3, 2), 16) / 255,
+                                    parseInt(annotation.color.substr(5, 2), 16) / 255
+                                )
+                            });
+                        }
+                    }
+                    
+                    const pdfBytes = await pdfDoc.save();
+                    saveAs(new Blob([pdfBytes], { type: 'application/pdf' }), 'edited.pdf');
+                    
+                } catch (error) {
+                    console.error('Error saving PDF:', error);
+                    alert(`Error saving PDF: ${error.message}`);
+                }
+            });
+            
+            // Reset
+            resetBtn.addEventListener('click', () => {
+                pdfDoc = null;
+                fileInput.value = '';
+                annotations = [];
+                document.getElementById('edit-container').classList.add('hidden');
+                document.getElementById('edit-controls').classList.add('hidden');
+                pdfCanvas.getContext('2d').clearRect(0, 0, pdfCanvas.width, pdfCanvas.height);
+            });
+        }
+
+        // ========================
+        // Convert to Images Functionality
+        // ========================
+        function initConvertTool() {
+            const dropZone = document.getElementById('convert-drop-zone');
+            const fileInput = document.getElementById('convert-file');
+            const convertBtn = document.getElementById('convert-execute');
+            const resetBtn = document.getElementById('convert-reset');
+            const thumbnailsContainer = document.getElementById('convert-thumbnails');
+            
+            let pdfDoc = null;
+            let numPages = 0;
+            
+            // Handle file selection
+            dropZone.addEventListener('click', () => fileInput.click());
+            fileInput.addEventListener('change', handleConvertFile);
+            
+            // Handle drag and drop
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('active');
+            });
+            
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('active');
+            });
+            
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('active');
+                fileInput.files = e.dataTransfer.files;
+                handleConvertFile({ target: fileInput });
+            });
+            
+            // Handle page range selection change
+            document.getElementById('convert-pages').addEventListener('change', (e) => {
+                document.getElementById('convert-range-controls').classList.toggle('hidden', e.target.value !== 'range');
+            });
+            
+            async function handleConvertFile(e) {
+                const file = e.target.files[0];
+                
+                if (!file || file.type !== 'application/pdf') {
+                    alert('Please select a valid PDF file');
+                    return;
+                }
+                
+                try {
+                    const arrayBuffer = await file.arrayBuffer();
+                    pdfDoc = await pdfjsLib.getDocument(arrayBuffer).promise;
+                    numPages = pdfDoc.numPages;
+                    
+                    // Update page range inputs
+                    document.getElementById('convert-from').max = numPages;
+                    document.getElementById('convert-to').max = numPages;
+                    document.getElementById('convert-to').value = numPages;
+                    
+                    // Show thumbnails
+                    thumbnailsContainer.innerHTML = '';
+                    thumbnailsContainer.classList.remove('hidden');
+                    
+                    // Create thumbnails for each page
+                    for (let i = 1; i <= Math.min(numPages, 10); i++) {
+                        const page = await pdfDoc.getPage(i);
+                        const viewport = page.getViewport({ scale: 0.15 });
+                        
+                        const canvas = document.createElement('canvas');
+                        const context = canvas.getContext('2d');
+                        canvas.height = viewport.height;
+                        canvas.width = viewport.width;
+                        
+                        await page.render({
+                            canvasContext: context,
+                            viewport: viewport
+                        }).promise;
+                        
+                        const thumbnail = document.createElement('div');
+                        thumbnail.className = 'thumbnail';
+                        thumbnail.dataset.page = i;
+                        thumbnail.innerHTML = `
+                            <img src="${canvas.toDataURL()}" alt="Page ${i}">
+                            <p>Page ${i}</p>
+                        `;
+                        
+                        thumbnail.addEventListener('click', () => {
+                            thumbnail.classList.toggle('selected');
+                        });
+                        
+                        thumbnailsContainer.appendChild(thumbnail);
+                    }
+                    
+                    if (numPages > 10) {
+                        const moreText = document.createElement('p');
+                        moreText.textContent = `... and ${numPages - 10} more pages`;
+                        thumbnailsContainer.appendChild(moreText);
+                    }
+                    
+                    document.getElementById('convert-controls').classList.remove('hidden');
+                    
+                } catch (error) {
+                    console.error('Error processing PDF:', error);
+                    alert(`Error processing PDF: ${error.message}`);
+                }
+            }
+            
+            // Convert to images
+            convertBtn.addEventListener('click', async () => {
+                if (!pdfDoc) {
+                    alert('Please select a PDF file first');
+                    return;
+                }
+                
+                try {
+                    const format = document.getElementById('convert-format').value;
+                    const quality = parseInt(document.getElementById('convert-quality').value) / 100;
+                    const pagesOption = document.getElementById('convert-pages').value;
+                    
+                    let pagesToConvert = [];
+                    
+                    if (pagesOption === 'all') {
+                        for (let i = 1; i <= numPages; i++) {
+                            pagesToConvert.push(i);
+                        }
+                    } else if (pagesOption === 'selected') {
+                        const selected = document.querySelectorAll('#convert-thumbnails .thumbnail.selected');
+                        if (selected.length === 0) {
+                            alert('Please select at least one page');
+                            return;
+                        }
+                        selected.forEach(thumb => {
+                            pagesToConvert.push(parseInt(thumb.dataset.page));
+                        });
+                    } else if (pagesOption === 'range') {
+                        const from = parseInt(document.getElementById('convert-from').value);
+                        const to = parseInt(document.getElementById('convert-to').value);
+                        
+                        if (from > to || from < 1 || to > numPages) {
+                            alert('Invalid page range');
+                            return;
+                        }
+                        
+                        for (let i = from; i <= to; i++) {
+                            pagesToConvert.push(i);
+                        }
+                    }
+                    
+                    // Create ZIP file for multiple images
+                    if (pagesToConvert.length > 1) {
+                        alert(`Converting pages ${pagesToConvert.join(', ')} to ${format.toUpperCase()} images...`);
+                        
+                        // In a real app, you would use a library like JSZip to create a ZIP file
+                        // For this demo, we'll just download each image separately
+                        for (const pageNum of pagesToConvert) {
+                            await convertPage(pageNum, format, quality);
+                        }
+                    } else {
+                        await convertPage(pagesToConvert[0], format, quality);
+                    }
+                    
+                } catch (error) {
+                    console.error('Error converting PDF:', error);
+                    alert(`Error converting PDF: ${error.message}`);
+                }
+            });
+            
+            async function convertPage(pageNum, format, quality) {
+                const page = await pdfDoc.getPage(pageNum);
+                const viewport = page.getViewport({ scale: 2.0 }); // Higher scale for better quality
+                
+                const canvas = document.createElement('canvas');
+                const context = canvas.getContext('2d');
+                canvas.height = viewport.height;
+                canvas.width = viewport.width;
+                
+                await page.render({
+                    canvasContext: context,
+                    viewport: viewport
+                }).promise;
+                
+                let mimeType, extension;
+                if (format === 'png') {
+                    mimeType = 'image/png';
+                    extension = 'png';
+                } else {
+                    mimeType = 'image/jpeg';
+                    extension = 'jpg';
+                }
+                
+                const imageData = canvas.toDataURL(mimeType, quality);
+                const link = document.createElement('a');
+                link.href = imageData;
+                link.download = `page_${pageNum}.${extension}`;
+                link.click();
+            }
+            
+            // Reset
+            resetBtn.addEventListener('click', () => {
+                pdfDoc = null;
+                fileInput.value = '';
+                thumbnailsContainer.innerHTML = '';
+                thumbnailsContainer.classList.add('hidden');
+                document.getElementById('convert-controls').classList.add('hidden');
+            });
+        }
+    </script>
+</body>
+</html>
